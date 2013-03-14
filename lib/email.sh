@@ -26,6 +26,7 @@ __email_main() {
   user="${args[1]}"
   pass="${args[2]}"
   domain="$(echo "$user" | sed "s/.*@\(.*\)/\1/" )"
+  unix_user="$(echo "$user" | sed "s/@/\./")"
   
   # sanity checks
   [ -z "$cmd" ] && echo "please specify a command" >&2 && return 1 
@@ -47,7 +48,7 @@ __email_add() {
   
   # sanity
   [ -z "$pass" ] && echo "error: please specify a password" >&2 && return 1
-  [ -n "$(grep "^$user:" /etc/passwd)" ] && echo "error: $user exists" >&2 && return 1
+  [ -n "$(grep "^$unix_user:" /etc/passwd)" ] && echo "error: $user exists" >&2 && return 1
   
   # be sure postfix and courier-pop are installed and configured
   __email_ensure_postfix
@@ -57,12 +58,12 @@ __email_add() {
   
   # create user
   sudo groupadd "email"
-  sudo useradd -g"email" -s/bin/bash -d/home/"$user" -m "$user"
-  sudo su "$user" -c 'mkdir -p /home/'"$user"'/Maildir/cur'
-  echo "$user":"$pass" | sudo chpasswd
+  sudo useradd -g"email" -s/bin/bash -d/home/email/"$unix_user" -m "$unix_user"
+  sudo su "$unix_user" -c 'mkdir -p /home/email/'"$unix_user"'/Maildir/cur'
+  echo "$unix_user":"$pass" | sudo chpasswd
   
   # postfix virtual mapping for user
-  echo "$user $user" | sudo tee -a /etc/postfix/virtual > /dev/null
+  echo "$user $unix_user" | sudo tee -a /etc/postfix/virtual > /dev/null
   sudo postmap /etc/postfix/virtual
   
   # ensure postfix knows to accept mail for domain
@@ -76,9 +77,9 @@ __email_edit() {
 
   # sanity
   [ -z "$pass" ] && echo "error: please specify a password" >&2 && return 1
-  [ -z "$(grep "^$user:" /etc/passwd)" ] && echo "error: $user does not exist" >&2 && return 1
+  [ -z "$(grep "^$unix_user:" /etc/passwd)" ] && echo "error: $user does not exist" >&2 && return 1
   
-  echo "$user":"$pass" | sudo chpasswd
+  echo "$unix_user":"$pass" | sudo chpasswd
 }
 
 __email_remove() {
@@ -86,8 +87,8 @@ __email_remove() {
   # sanity
   [ -z "$(grep "^$user:" /etc/passwd)" ] && echo "error: $user does not exist" >&2 && return 1
   
-  sudo deluser "$user"
-  sudo rm -rf /home/"$user"
+  sudo deluser "$unix_user"
+  sudo rm -rf /home/email/"$unix_user"
   
   # remove virtual mapping
   line="$(grep -n "$user" /etc/postfix/virtual | sed "s/\(.*\):.*/\1/")"
@@ -104,6 +105,7 @@ __email_remove() {
 __email_ensure_postfix() {
   dpkg -l postfix > /dev/null 2>&1 || sudo DEBIAN_FRONTEND=noninteractive apt-get install postfix -y
   dpkg -l courier-pop > /dev/null 2>&1 || sudo DEBIAN_FRONTEND=noninteractive apt-get install courier-pop -y
+  dpkg -l mailutils > /dev/null 2>&1 || sudo apt-get install mailutils
   sudo postconf -e "home_mailbox = Maildir/"
   sudo postconf -e "mailbox_command = "
   sudo postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual"
@@ -111,15 +113,11 @@ __email_ensure_postfix() {
 }
 
 __email_add_domain() {
-  postconf mydestination | grep "$domain" > /dev/null || sudo postconf -e "$(postconf mydestination), $domain"
-  
-  # do we need this?
-  #postconf virtual_alias_domains | grep "$domain" > /dev/null || sudo postconf -e "$(postconf virtual_alias_domains), $domain"
-  #"virtual_alias_domains = fossedu.org linuxelabs.com"
+  postconf virtual_alias_domains | grep "$domain" > /dev/null || sudo postconf -e "$(postconf virtual_alias_domains), $domain"
 }
 
 __email_remove_domain() {
-  grep "$domain" /etc/passwd > /dev/null || sudo postconf -e "$(postconf mydestination | sed "s/\(.*\), $domain\(.*\)//")"
+  grep "$domain" /etc/passwd > /dev/null || sudo postconf -e "$(postconf virtual_alias_domains | sed "s/\(.*\), $domain\(.*\)//")"
 }
 
 __email_reload() {
