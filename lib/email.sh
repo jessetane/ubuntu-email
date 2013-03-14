@@ -62,7 +62,7 @@ __email_add() {
   echo "$user":"$pass" | sudo chpasswd
   
   # postfix virtual mapping for user
-  echo "$user $user" | sudo tee -a /etc/postfix/virtual
+  echo "$user $user" | sudo tee -a /etc/postfix/virtual > /dev/null
   sudo postmap /etc/postfix/virtual
   
   # ensure postfix knows to accept mail for domain
