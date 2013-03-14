@@ -56,8 +56,8 @@ __email_add() {
   ps aux | grep postfix | grep -v grep > /dev/null || sudo postfix start
   
   # create user
-  sudo groupadd "$user"
-  sudo useradd -g"$user" -s/bin/bash -d/home/"$user" -m "$user"
+  sudo groupadd "email"
+  sudo useradd -g"email" -s/bin/bash -d/home/"$user" -m "$user"
   sudo su "$user" -c 'mkdir -p /home/'"$user"'/Maildir/cur'
   echo "$user":"$pass" | sudo chpasswd
   
@@ -87,7 +87,6 @@ __email_remove() {
   [ -z "$(grep "^$user:" /etc/passwd)" ] && echo "error: $user does not exist" >&2 && return 1
   
   sudo deluser "$user"
-  sudo delgroup "$user"
   sudo rm -rf /home/"$user"
   
   # remove virtual mapping
