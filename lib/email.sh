@@ -58,9 +58,8 @@ __email_add() {
   # create user
   sudo groupadd "$user"
   sudo useradd -g"$user" -s/bin/bash -d/home/"$user" -m "$user"
-  sudo useradd "$user" -p "$(mkpasswd "$pass")"
-  echo "$user":"$pass" | sudo tee chpasswd
-  sudo su "$user" -c 'mkdir -p /home/"$user"/Maildir/cur'
+  sudo su "$user" -c 'mkdir -p /home/'"$user"'/Maildir/cur'
+  echo "$user":"$pass" | sudo chpasswd
   
   # postfix virtual mapping for user
   echo "$user $user" | sudo tee -a /etc/postfix/virtual
@@ -80,7 +79,7 @@ __email_edit() {
   [ -z "$pass" ] && echo "error: please specify a password" >&2 && return 1
   [ -z "$(grep "^$user:" /etc/passwd)" ] && echo "error: $user does not exist" >&2 && return 1
   
-  echo "$user":"$pass" | sudo tee chpasswd
+  echo "$user":"$pass" | sudo chpasswd
 }
 
 __email_remove() {
