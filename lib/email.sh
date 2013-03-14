@@ -28,7 +28,8 @@ __email_main() {
   domain="$(echo "$user" | sed "s/.*@\(.*\)/\1/" )"
   
   # sanity checks
-  [ -z "$cmd" ] && echo "please specify a command" >&2 && return 1  
+  [ -z "$cmd" ] && echo "please specify a command" >&2 && return 1 
+  [ -z "$user" ] && echo "error: please specify a user" >&2 && return 1
   [ -z "$domain" ] && echo "$user does not appear to be an email address" >&2 && return 1
   
   # switch commands
@@ -45,7 +46,6 @@ __email_main() {
 __email_add() {
   
   # sanity
-  [ -z "$user" ] && echo "error: please specify a user" >&2 && return 1
   [ -z "$pass" ] && echo "error: please specify a password" >&2 && return 1
   [ -n "$(grep "^$user:" /etc/passwd)" ] && echo "error: $user exists" >&2 && return 1
   
@@ -75,7 +75,6 @@ __email_add() {
 __email_edit() {
 
   # sanity
-  [ -z "$user" ] && echo "error: please specify a user" >&2 && return 1
   [ -z "$pass" ] && echo "error: please specify a password" >&2 && return 1
   [ -z "$(grep "^$user:" /etc/passwd)" ] && echo "error: $user does not exist" >&2 && return 1
   
@@ -85,7 +84,6 @@ __email_edit() {
 __email_remove() {
   
   # sanity
-  [ -z "$user" ] && echo "error: please specify a user" >&2 && return 1
   [ -z "$(grep "^$user:" /etc/passwd)" ] && echo "error: $user does not exist" >&2 && return 1
   
   sudo deluser "$user"
