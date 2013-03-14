@@ -110,6 +110,7 @@ __email_ensure_postfix() {
   sudo postconf -e "mailbox_command = "
   sudo postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual"
   [ ! -f /etc/postfix/virtual ] && sudo touch /etc/postfix/virtual
+  sudo mkdir -p /home/email
 }
 
 __email_add_domain() {
