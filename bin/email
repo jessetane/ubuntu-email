@@ -1,0 +1,9 @@
+#
+# email exe
+#
+
+dir="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"/..
+
+source "$dir"/lib/email.sh
+
+email "$@"
