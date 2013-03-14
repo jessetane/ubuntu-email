@@ -25,10 +25,11 @@ __email_main() {
   cmd="${args[0]}"
   user="${args[1]}"
   pass="${args[2]}"
+  domain="$(echo "$user" | sed "s/.*@\(.*\)/\1/" )"
   
   # sanity checks
-  [ "$(whoami)" != "root" ] && echo "you must be root (sudo)" >&2 && return 1
   [ -z "$cmd" ] && echo "please specify a command" >&2 && return 1  
+  [ -z "$domain" ] && echo "$user does not appear to be an email address" >&2 && return 1
   
   # switch commands
   case "$cmd" in
@@ -48,14 +49,27 @@ __email_add() {
   [ -z "$pass" ] && echo "error: please specify a password" >&2 && return 1
   [ -n "$(grep "^$user:" /etc/passwd)" ] && echo "error: $user exists" >&2 && return 1
   
-  #
+  # be sure postfix and courier-pop are installed and configured
+  __email_ensure_postfix
   
+  # start postfix if not running
+  ps aux | grep postfix | grep -v grep > /dev/null || sudo postfix start
   
   # create user
-  groupadd "$user"
-  useradd -g"$user" -s/bin/bash -d/home/"$user" -m "$user"
-  useradd "$user" -p "$(mkpasswd "$pass")"
-  mkdir -p /home/"$user"/Maildir/cur
+  sudo groupadd "$user"
+  sudo useradd -g"$user" -s/bin/bash -d/home/"$user" -m "$user"
+  sudo useradd "$user" -p "$(mkpasswd "$pass")"
+  sudo su "$user" -c 'mkdir -p /home/"$user"/Maildir/cur'
+  
+  # postfix virtual mapping for user
+  echo "$user $user" | sudo tee -a /etc/postfix/virtual
+  sudo postmap /etc/postfix/virtual
+  
+  # ensure postfix knows to accept mail for domain
+  __email_add_domain "$domain"
+  
+  # reload
+  __email_reload
 }
 
 __email_edit() {
@@ -65,7 +79,7 @@ __email_edit() {
   [ -z "$pass" ] && echo "error: please specify a password" >&2 && return 1
   [ -z "$(grep "^$user:" /etc/passwd)" ] && echo "error: $user does not exist" >&2 && return 1
   
-  useradd "$user" -p "$(mkpasswd "$pass")"
+  sudo useradd "$user" -p "$(mkpasswd "$pass")"
 }
 
 __email_remove() {
@@ -74,42 +88,43 @@ __email_remove() {
   [ -z "$user" ] && echo "error: please specify a user" >&2 && return 1
   [ -z "$(grep "^$user:" /etc/passwd)" ] && echo "error: $user does not exist" >&2 && return 1
   
-  deluser "$user"
-  delgroup "$user"
-  rm -rf /home/"$user"
+  sudo deluser "$user"
+  sudo delgroup "$user"
+  sudo rm -rf /home/"$user"
+  
+  # remove virtual mapping
+  line="$(grep -n "$user" /etc/postfix/virtual | sed "s/\(.*\):.*/\1/")"
+  [ -n "$line" ] && sudo sed -i "${line}d;" /etc/postfix/virtual
+  sudo postmap /etc/postfix/virtual
+  
+  # possibly stop listening for mail to domain if no accounts are registered
+  __email_remove_domain "$domain"
+  
+  # reload
+  __email_reload
 }
 
-__email_init() {
-  
-  # sanity
-  [ -d /etc/postfix ] && echo "error: postfix is already installed" >&2 && return 1
-
-  # 
-  DEBIAN_FRONTEND=noninteractive apt-get install postfix -y
-  DEBIAN_FRONTEND=noninteractive apt-get install courier-pop -y
-  postconf -e "home_mailbox = Maildir/"
-  postconf -e "mailbox_command = "
+__email_ensure_postfix() {
+  dpkg -l postfix > /dev/null 2>&1 || sudo DEBIAN_FRONTEND=noninteractive apt-get install postfix -y
+  dpkg -l courier-pop > /dev/null 2>&1 || sudo DEBIAN_FRONTEND=noninteractive apt-get install courier-pop -y
+  sudo postconf -e "home_mailbox = Maildir/"
+  sudo postconf -e "mailbox_command = "
+  sudo postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual"
+  [ ! -f /etc/postfix/virtual ] && sudo touch /etc/postfix/virtual
 }
 
-__email_domain() {
+__email_add_domain() {
+  postconf mydestination | grep "$domain" > /dev/null || sudo postconf -e "$(postconf mydestination), $domain"
   
-  # 
-  action="$3"
-  domain="$4"
-  
-  # sanity
-  
-  
-  #
-  case "$action" in
-    "add")
-      postconf -e "$(postconf mydestination), $domain"
-      ;;
-    "remove")
-      postconf -e "$(postconf mydestination | sed "s/\(.*\)$domain\(.*\)//")"
-      ;;
-    *)
-      echo "$action: command not found" >&2 && return 127
-      ;;
-  esac
+  # do we need this?
+  #postconf virtual_alias_domains | grep "$domain" > /dev/null || sudo postconf -e "$(postconf virtual_alias_domains), $domain"
+  #"virtual_alias_domains = fossedu.org linuxelabs.com"
+}
+
+__email_remove_domain() {
+  grep "$domain" /etc/passwd > /dev/null || sudo postconf -e "$(postconf mydestination | sed "s/\(.*\), $domain\(.*\)//")"
+}
+
+__email_reload() {
+  sudo /etc/init.d/postfix restart
 }
